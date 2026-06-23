@@ -164,6 +164,37 @@ The async client exposes the same methods with `await`.
 
 ---
 
+## Order statuses
+
+`OrderStatusID` is documented as a fixed set, used identically by `get_status` and the
+webhook. The SDK exposes them as `tronado.OrderStatusCode`:
+
+| `OrderStatusID` | `OrderStatusCode` | Meaning |
+|---|---|---|
+| `20` | `WAITING_FOR_PAYMENT` | Order created; awaiting the user's payment |
+| `25` | `PHOTO_SENT_TO_ADMIN` | Payment proof submitted, sent to an admin |
+| `27` | `READY_TO_TRANSFER` | Approved; queued for the on-chain TRX transfer |
+| **`30`** | **`PAYMENT_ACCEPTED`** | **Successful, final payment (`IsPaid == true`)** |
+| `40` | `PAYMENT_REJECTED` | Payment rejected |
+| `200` | `CANCELLED` | Order cancelled |
+
+Only **`30` (`PAYMENT_ACCEPTED`)** means money is settled — that's what
+`is_payment_accepted` checks (alongside `IsPaid`). `OrderStatusTitle` is a Persian,
+display-only label, so branch on the id, never the title.
+
+```python
+from tronado import OrderStatusCode
+
+status = tron.order.get_status(id="TrndOrderID_55")
+if status.is_payment_accepted:                 # IsPaid or OrderStatusID == 30
+    fulfill()
+elif status.order_status is OrderStatusCode.PAYMENT_REJECTED:
+    notify_rejected()
+# status.order_status is None for any id Tronado may add in future (no crash).
+```
+
+---
+
 ## Handling webhooks (IPN)
 
 Tronado POSTs a JSON callback to your `CallbackUrl` **on every order status change** and

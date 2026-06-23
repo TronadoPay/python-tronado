@@ -50,15 +50,35 @@ WEBHOOK_SIGNATURE_HEADER = "X-Tronado-Sig"
 
 
 class OrderStatusCode(IntEnum):
-    """Documented Tronado order-status identifiers.
+    """Documented Tronado ``OrderStatusID`` values.
 
-    The public documentation only defines a single status value explicitly. Treat any
-    other ``OrderStatusID`` returned by the API as an unknown/forward-compatible value
-    rather than assuming a meaning for it.
+    The same set of identifiers is used for both the ``GetStatus`` API response and the
+    IPN/webhook callback. ``OrderStatusTitle`` carries a Persian, display-only label;
+    branch your logic on the numeric id (this enum), not on the title.
+
+    Only :attr:`PAYMENT_ACCEPTED` (``30``) represents a successful, final payment.
+    Treat any *undocumented* id the API may send in future as an unknown value (see
+    :meth:`~tronado.models.order.OrderStatus.order_status`, which returns ``None`` for
+    unrecognized ids rather than raising).
     """
 
+    WAITING_FOR_PAYMENT = 20
+    """Order created; awaiting the user's payment. (``WaitingForPayment``)"""
+
+    PHOTO_SENT_TO_ADMIN = 25
+    """Payment proof submitted and sent to an admin for review. (``PhotoSentToAdmin``)"""
+
+    READY_TO_TRANSFER = 27
+    """Approved and queued for the on-chain TRX transfer. (``ReadyToTransfer``)"""
+
     PAYMENT_ACCEPTED = 30
-    """A successful payment. Equivalent to ``IsPaid == True``."""
+    """Successful, final payment. Equivalent to ``IsPaid == True``. (``PaymentAccepted``)"""
+
+    PAYMENT_REJECTED = 40
+    """Payment was rejected. (``PaymentRejected``)"""
+
+    CANCELLED = 200
+    """Order was cancelled. (``Cancelled``)"""
 
 
 __all__ = [

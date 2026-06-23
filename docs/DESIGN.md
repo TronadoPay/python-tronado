@@ -23,8 +23,12 @@
   lowercase hex, computed over the **raw** request body before parsing, compared in
   constant time. The docs include Node.js (`crypto.createHmac('sha512', …)`) and C#
   (`HMACSHA512`) reference implementations. This SDK implements exactly that scheme.
-- **Order status:** only `OrderStatusID == 30` (`PaymentAccepted`) is documented.
-  We do not invent additional status codes.
+- **Order status:** the docs define a fixed `OrderStatusID` set, used identically by the
+  `GetStatus` response and the IPN callback: `20 WaitingForPayment`, `25 PhotoSentToAdmin`,
+  `27 ReadyToTransfer`, `30 PaymentAccepted`, `40 PaymentRejected`, `200 Cancelled`. Only
+  `30` means a successful, final payment (`IsPaid == true`). `OrderStatusTitle` is a
+  Persian, display-only label — branch on the id, not the title. The SDK models these as
+  `OrderStatusCode` and treats any *undocumented* id as unknown rather than guessing.
 - **Per-user limits (informational):** 1 tx/day, 500k toman/day, 1M toman/month,
   2 cancelled/day, 4 cancelled/month.
 
@@ -93,7 +97,8 @@ Webhook signature mismatch → `InvalidSignatureError`.
 
 ## 6. Out of scope / not invented
 
-- No status codes beyond the documented `30 = PaymentAccepted`.
+- No status codes beyond the six documented in `OrderStatusCode`
+  (`20/25/27/30/40/200`); only `30 = PaymentAccepted` is treated as paid.
 - No auth scheme other than the documented `x-api-key` header.
 - The webhook signature scheme is implemented **only** because the docs define it
   explicitly; if a future version removed that definition, `verify_signature` would

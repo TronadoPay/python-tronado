@@ -8,6 +8,7 @@ import json
 
 import pytest
 
+from tronado.constants import OrderStatusCode
 from tronado.exceptions import InvalidSignatureError, TronadoWebhookError
 from tronado.webhook import compute_signature, construct_event, parse_callback, verify_signature
 
@@ -72,6 +73,23 @@ def test_callback_accepts_both_payment_id_spellings() -> None:
 def test_parse_callback_rejects_invalid_json() -> None:
     with pytest.raises(TronadoWebhookError):
         parse_callback(b"{not json")
+
+
+@pytest.mark.parametrize("status_id", [20, 25, 27, 30, 40, 200])
+def test_callback_parses_every_documented_status(status_id: int) -> None:
+    body = json.dumps({"PaymentId": "p", "OrderStatusID": status_id}).encode()
+    cb = parse_callback(body)
+    assert cb.order_status_id == status_id
+    assert cb.order_status is OrderStatusCode(status_id)
+    # IsPaid defaults False here, so only status 30 is accepted.
+    assert cb.is_payment_accepted is (status_id == 30)
+
+
+def test_callback_unknown_status_is_forward_compatible() -> None:
+    cb = parse_callback(b'{"PaymentId": "p", "OrderStatusID": 9999}')
+    assert cb.order_status_id == 9999
+    assert cb.order_status is None
+    assert cb.is_payment_accepted is False
 
 
 def test_construct_event_verifies_then_parses() -> None:

@@ -94,8 +94,23 @@ class OrderStatus(TronadoModel):
     payment_date: Optional[FlexibleDateTime] = Field(default=None, alias="PaymentDate")
 
     @property
+    def order_status(self) -> Optional[OrderStatusCode]:
+        """The documented :class:`OrderStatusCode` for this order, or ``None``.
+
+        Returns ``None`` if no status is present or the id is not (yet) documented, so
+        new server-side statuses never raise. Use :attr:`order_status_id` for the raw
+        value.
+        """
+        if self.order_status_id is None:
+            return None
+        try:
+            return OrderStatusCode(self.order_status_id)
+        except ValueError:
+            return None
+
+    @property
     def is_payment_accepted(self) -> bool:
-        """``True`` when the payment succeeded (``IsPaid`` or status ``30``)."""
+        """``True`` only for a successful, final payment (``IsPaid`` or status ``30``)."""
         return self.is_paid or self.order_status_id == OrderStatusCode.PAYMENT_ACCEPTED
 
 
