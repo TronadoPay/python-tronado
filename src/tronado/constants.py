@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from enum import IntEnum
 
-#: SDK version, also used to build the default ``User-Agent`` header.
-SDK_VERSION = "0.1.0"
+#: SDK version, also used by ``tronado.__version__`` and the default ``User-Agent``
+#: header. Keep in sync with ``[project].version`` in ``pyproject.toml``.
+SDK_VERSION = "0.1.1"
 
 #: Default ``User-Agent`` header value.
 DEFAULT_USER_AGENT = f"tronado-python/{SDK_VERSION}"

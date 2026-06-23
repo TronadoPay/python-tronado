@@ -4,7 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tronado"
-version = "0.1.0"
+# Keep in sync with SDK_VERSION in src/tronado/constants.py.
+version = "0.1.1"
 description = "Production-grade, version-aware Python SDK for the Tronado Public API (v5)."
 readme = "README.md"
 requires-python = ">=3.9"
