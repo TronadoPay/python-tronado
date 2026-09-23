@@ -497,6 +497,20 @@ tox                    # py39–py313 + a lint/type-check env
 CI (GitHub Actions, [`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs ruff and
 mypy once, then the test-suite on Python **3.9, 3.10, 3.11, 3.12, and 3.13**.
 
+### Releasing
+
+Releases are published to PyPI by
+[`.github/workflows/release.yml`](.github/workflows/release.yml) through PyPI trusted
+publishing, so no API token is involved:
+
+1. Bump `version` in `pyproject.toml` and `SDK_VERSION` in `src/tronado/constants.py`,
+   and add a `CHANGELOG.md` entry.
+2. Commit, then tag and push: `git tag vX.Y.Z && git push origin main vX.Y.Z`.
+
+The workflow checks that the tag matches both version strings, runs lint, type-check
+and tests, builds and checks the distributions, publishes them to PyPI, and creates a
+GitHub release from the changelog entry.
+
 See [`examples/`](examples/) for runnable scripts and [`docs/DESIGN.md`](docs/DESIGN.md)
 for the architecture and the full endpoint matrix.
 
