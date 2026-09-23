@@ -40,7 +40,7 @@ class PreparedRequest:
     method: str
     url: str
     headers: Dict[str, str]
-    content: Optional[bytes]
+    content: bytes
     params: Optional[Dict[str, Any]]
 
 
@@ -77,19 +77,23 @@ def prepare_request(
     Args:
         config: Active client configuration.
         operation: The operation descriptor (path template, models, …).
-        request_model: A validated request model instance, or ``None`` for no-body
-            operations.
+        request_model: A validated request model instance, or ``None`` for operations
+            without input.
         version: API version tag substituted into the path template (e.g. ``"v5"``).
         query: Optional query-string parameters.
 
     Raises:
         TronadoAPIError: If the operation requires a body but none was supplied.
+        TronadoConfigError: If the operation requires the API key and none is configured.
     """
     path = operation.path_template.format(version=version)
     url = f"{config.base_url}{path}"
 
-    content: Optional[bytes] = None
-    if operation.request_model is not None:
+    if operation.request_model is None:
+        # Operations without input still send ``{}``: the docs warn that IIS rejects a
+        # POST without a body (no Content-Length) with 411 Length Required.
+        content = encode_json({})
+    else:
         if request_model is None:
             raise TronadoAPIError(
                 f"Operation {operation.name!r} requires a request body but none was given."
@@ -97,7 +101,7 @@ def prepare_request(
         body = request_model.model_dump(by_alias=True, exclude_none=False)
         content = encode_json(body)
 
-    headers = config.build_headers()
+    headers = config.build_headers(authenticated=operation.requires_auth)
 
     params: Optional[Dict[str, Any]] = None
     if query:

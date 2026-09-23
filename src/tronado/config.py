@@ -38,7 +38,8 @@ class TronadoConfig:
 
     Args:
         api_key: Tronado API key sent in the ``x-api-key`` header. If ``None``, the
-            ``TRONADO_API_KEY`` environment variable is consulted.
+            ``TRONADO_API_KEY`` environment variable is consulted. The price endpoints
+            are public, so a key is only required once you call an order endpoint.
         base_url: API base URL (no trailing slash needed). Defaults to the production
             host, overridable via the ``TRONADO_BASE_URL`` environment variable.
         timeout: Total request timeout in seconds.
@@ -55,7 +56,7 @@ class TronadoConfig:
             compatibility only; the documented value is ``x-api-key``.
 
     Raises:
-        TronadoConfigError: If the API key is missing or numeric settings are invalid.
+        TronadoConfigError: If the base URL or numeric settings are invalid.
     """
 
     api_key: Optional[str] = None
@@ -72,18 +73,13 @@ class TronadoConfig:
     def __post_init__(self) -> None:
         # Frozen dataclass: normalize/derive fields via object.__setattr__.
         api_key = self.api_key if self.api_key is not None else os.getenv(API_KEY_ENV_VAR)
-        object.__setattr__(self, "api_key", api_key)
+        # A blank key (e.g. an empty env var) is treated as no key at all.
+        object.__setattr__(self, "api_key", api_key or None)
 
         env_base = os.getenv(BASE_URL_ENV_VAR)
         if env_base and self.base_url == DEFAULT_BASE_URL:
             object.__setattr__(self, "base_url", env_base)
 
-        if not self.api_key:
-            raise TronadoConfigError(
-                "A Tronado API key is required. Pass api_key=... or set the "
-                f"{API_KEY_ENV_VAR} environment variable. Request a key from "
-                "https://t.me/TronadoSupp."
-            )
         if not isinstance(self.base_url, str) or not self.base_url.lower().startswith(
             ("http://", "https://")
         ):
@@ -104,16 +100,22 @@ class TronadoConfig:
             self, "default_headers", MappingProxyType(dict(self.default_headers))
         )
 
-    def build_headers(self) -> Dict[str, str]:
+    def build_headers(self, *, authenticated: bool = True) -> Dict[str, str]:
         """Build the outgoing header set for a request.
 
         ``Content-Type: application/json`` is sent on every request, matching the
-        documented contract (the Tronado docs list it for all endpoints, including the
-        no-body price calls).
+        documented contract (every request carries a JSON body, at least ``{}``).
+
+        Args:
+            authenticated: Whether the endpoint requires the API key. The price
+                endpoints are documented as public, so the key is not sent to them.
 
         Returns:
-            A new dict of headers including the API key, ``Content-Type``,
-            ``User-Agent`` and ``Accept``.
+            A new dict of headers with ``Content-Type``, ``User-Agent``, ``Accept`` and,
+            for authenticated endpoints, the API key.
+
+        Raises:
+            TronadoConfigError: If ``authenticated`` is true and no API key is configured.
         """
         headers: Dict[str, str] = {
             "Accept": "application/json",
@@ -121,9 +123,15 @@ class TronadoConfig:
             "User-Agent": self.user_agent,
         }
         headers.update(self.default_headers)
-        # The API key header is authoritative and cannot be shadowed by default_headers.
-        assert self.api_key is not None  # guaranteed by __post_init__
-        headers[self.api_key_header] = self.api_key
+        if authenticated:
+            if not self.api_key:
+                raise TronadoConfigError(
+                    "A Tronado API key is required for this endpoint. Pass api_key=... or "
+                    f"set the {API_KEY_ENV_VAR} environment variable. Request a key from "
+                    "https://t.me/TronadoSupp."
+                )
+            # The API key header is authoritative and cannot be shadowed by default_headers.
+            headers[self.api_key_header] = self.api_key
         return headers
 
     def __repr__(self) -> str:  # pragma: no cover - cosmetic

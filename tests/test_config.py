@@ -19,9 +19,19 @@ def test_defaults() -> None:
     assert cfg.timeout > 0
 
 
-def test_missing_api_key_raises() -> None:
-    with pytest.raises(TronadoConfigError):
-        TronadoConfig()
+def test_missing_api_key_only_fails_for_authenticated_headers() -> None:
+    # The price endpoints are public, so a config without a key is valid...
+    cfg = TronadoConfig()
+    assert cfg.api_key is None
+    assert API_KEY_HEADER not in cfg.build_headers(authenticated=False)
+    # ...but an endpoint that needs the key cannot be called without one.
+    with pytest.raises(TronadoConfigError, match="API key"):
+        cfg.build_headers()
+
+
+def test_blank_api_key_is_treated_as_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRONADO_API_KEY", "")
+    assert TronadoConfig().api_key is None
 
 
 def test_api_key_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -63,6 +73,12 @@ def test_build_headers_includes_api_key_and_content_type() -> None:
     # Content-Type is always sent, matching the documented contract for every endpoint.
     assert headers["Content-Type"] == "application/json"
     assert headers["Accept"] == "application/json"
+
+
+def test_build_headers_omits_api_key_for_public_endpoints() -> None:
+    headers = TronadoConfig(api_key="secret").build_headers(authenticated=False)
+    assert API_KEY_HEADER not in headers
+    assert headers["Content-Type"] == "application/json"
 
 
 def test_default_headers_cannot_override_api_key() -> None:

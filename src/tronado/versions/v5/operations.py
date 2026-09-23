@@ -2,7 +2,8 @@
 
 These constants are the single source of truth for v5 endpoint wiring. Note that only
 :data:`GET_ORDER_TOKEN` carries a ``{version}`` segment; every other endpoint lives at
-an unversioned root, exactly as documented.
+an unversioned root, exactly as documented. The price endpoints are public, so they are
+flagged ``requires_auth=False`` and never receive the API key.
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ TRON_GET_PRICE_TO_TOMAN = Operation(
     path_template="/Tron/GetPriceToToman",
     request_model=None,
     response_model=TronPrice,
+    requires_auth=False,
 )
 
 TRON_GET_PRICE_WITH_WAGE_TO_TOMAN = Operation(
@@ -61,6 +63,7 @@ TRON_GET_PRICE_WITH_WAGE_TO_TOMAN = Operation(
     path_template="/Tron/GetPriceWithWageToToman",
     request_model=GetPriceWithWageRequest,
     response_model=PriceWithWage,
+    requires_auth=False,
 )
 
 TOMAN_CONVERT_TO_TRON = Operation(
@@ -69,14 +72,18 @@ TOMAN_CONVERT_TO_TRON = Operation(
     path_template="/Toman/ConvertToTronWageSubtracted",
     request_model=TomanConvertRequest,
     response_model=TronConversion,
+    requires_auth=False,
 )
 
+# No longer documented (the dollar price lives at /Dollar/GetPriceToToman); kept only
+# for the deprecated ``price.toman.get_price_to_toman()``.
 TOMAN_GET_PRICE_TO_TOMAN = Operation(
     name="toman.get_price_to_toman",
     method="POST",
     path_template="/Toman/GetPriceToToman",
     request_model=None,
     response_model=DollarPrice,
+    requires_auth=False,
 )
 
 DOLLAR_CONVERT_TO_TRON = Operation(
@@ -85,6 +92,7 @@ DOLLAR_CONVERT_TO_TRON = Operation(
     path_template="/Dollar/ConvertToTronWageSubtracted",
     request_model=DollarConvertRequest,
     response_model=TronConversion,
+    requires_auth=False,
 )
 
 DOLLAR_GET_PRICE_TO_TOMAN = Operation(
@@ -93,6 +101,7 @@ DOLLAR_GET_PRICE_TO_TOMAN = Operation(
     path_template="/Dollar/GetPriceToToman",
     request_model=None,
     response_model=DollarPrice,
+    requires_auth=False,
 )
 
 

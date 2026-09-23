@@ -4,10 +4,13 @@ Each resource method is a thin, fully-typed facade: it builds a request model an
 delegates to ``transport.invoke``. All retry/error/serialization *logic* lives in the
 transport and the pure helpers, so the sync and async variants below differ only by
 ``await`` — there is no duplicated behaviour, only duplicated (trivial) signatures.
+
+The ``price`` resources call public endpoints: they work without an API key.
 """
 
 from __future__ import annotations
 
+import warnings
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -50,6 +53,15 @@ def _check_wage(percentage: int) -> int:
     return percentage
 
 
+def _warn_toman_price_deprecated() -> None:
+    warnings.warn(
+        "price.toman.get_price_to_toman() calls /Toman/GetPriceToToman, which is no longer "
+        "documented; use price.dollar.get_price_to_toman() instead (same response).",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
 # =============================================================================== sync
 
 
@@ -75,14 +87,19 @@ class OrderResource:
             payment_id: Your application's unique payment identifier.
             wallet_address: Destination TRON wallet address.
             tron_amount: Invoice amount in TRX (use the price endpoints to compute it).
-            callback_url: HTTPS URL Tronado will POST payment results to.
+            callback_url: HTTPS URL Tronado will POST payment results to. Its domain
+                must be registered with Tronado support beforehand; otherwise no
+                callback is sent at all.
             wage_from_business_percentage: Share of the fee (0–100) the business
                 absorbs. ``0`` (default) adds the whole fee on top of the user's
-                payment; ``100`` subtracts it from your share. See the README for the
-                full fee model.
+                payment; ``100`` subtracts it from your share. It also decides which
+                webhook amount to credit (see
+                :class:`~tronado.models.webhook.CallbackPayload`).
 
         Returns:
-            The order token, payment URL and estimated Toman amount.
+            The order token, payment URLs and estimated Toman amount. Use
+            :attr:`~tronado.models.order.OrderTokenData.payment_page_url` for a button
+            in your own bot.
 
         Note:
             This operation creates a transaction and is therefore **not** retried
@@ -130,13 +147,16 @@ class TronPriceResource:
         self._version = version
 
     def get_price_to_toman(self) -> TronPrice:
-        """Get the current TRX price in Toman and USD (no request body)."""
+        """Get the current TRX price in Toman and USD (no input)."""
         return self._transport.invoke(ops.TRON_GET_PRICE_TO_TOMAN, version=self._version)
 
     def get_price_with_wage_to_toman(
         self, *, request_code: str, wallet_address: str, tron_amount: AmountInput
     ) -> PriceWithWage:
-        """Convert a TRX amount to Toman, with and without the wage/fee."""
+        """Convert a TRX amount to Toman, with and without the wage/fee.
+
+        Authenticated by ``request_code`` (provisioned by Tronado support), not the API key.
+        """
         request = GetPriceWithWageRequest(
             request_code=request_code,
             wallet_address=wallet_address,
@@ -160,7 +180,13 @@ class TomanPriceResource:
         return self._transport.invoke(ops.TOMAN_CONVERT_TO_TRON, request, version=self._version)
 
     def get_price_to_toman(self) -> DollarPrice:
-        """Get the current USD price in Toman (no request body)."""
+        """Get the current USD price in Toman.
+
+        .. deprecated:: 0.2.0
+            ``/Toman/GetPriceToToman`` is no longer documented. Use
+            :meth:`DollarPriceResource.get_price_to_toman`, which returns the same data.
+        """
+        _warn_toman_price_deprecated()
         return self._transport.invoke(ops.TOMAN_GET_PRICE_TO_TOMAN, version=self._version)
 
 
@@ -179,7 +205,7 @@ class DollarPriceResource:
         return self._transport.invoke(ops.DOLLAR_CONVERT_TO_TRON, request, version=self._version)
 
     def get_price_to_toman(self) -> DollarPrice:
-        """Get the current USD price in Toman (no request body)."""
+        """Get the current USD price in Toman (no input)."""
         return self._transport.invoke(ops.DOLLAR_GET_PRICE_TO_TOMAN, version=self._version)
 
 
@@ -281,7 +307,12 @@ class AsyncTomanPriceResource:
         )
 
     async def get_price_to_toman(self) -> DollarPrice:
-        """Get the current USD price in Toman."""
+        """Get the current USD price in Toman.
+
+        .. deprecated:: 0.2.0
+            Use :meth:`AsyncDollarPriceResource.get_price_to_toman` instead.
+        """
+        _warn_toman_price_deprecated()
         return await self._transport.invoke(ops.TOMAN_GET_PRICE_TO_TOMAN, version=self._version)
 
 

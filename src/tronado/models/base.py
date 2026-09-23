@@ -10,9 +10,12 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated, Union
+from enum import Enum
+from typing import Annotated, Optional, Type, TypeVar, Union
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict
+
+_E = TypeVar("_E", bound=Enum)
 
 # Matches an ISO-8601 timestamp whose fractional-seconds component has more than the
 # six digits Python's datetime supports (Tronado emits 7-digit ".1830000" fractions).
@@ -52,6 +55,20 @@ TronDecimal = Annotated[Decimal, BeforeValidator(_to_decimal)]
 
 #: Convenience alias for amount inputs accepted at the public API boundary.
 AmountInput = Union[Decimal, int, float, str]
+
+
+def to_known_enum(enum_cls: Type[_E], value: object) -> Optional[_E]:
+    """Map a raw API value to a documented ``enum_cls`` member, or ``None``.
+
+    ``None`` is returned for a missing value *and* for one the docs do not (yet) define,
+    so new server-side values never raise.
+    """
+    if value is None:
+        return None
+    try:
+        return enum_cls(value)
+    except ValueError:
+        return None
 
 
 class TronadoModel(BaseModel):

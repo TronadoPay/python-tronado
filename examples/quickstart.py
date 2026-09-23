@@ -30,6 +30,8 @@ def main() -> None:
             wage_from_business_percentage=0,
         )
         print("Open this link to pay:", order.full_payment_url)
+        # For a button in your own bot: opens Tronado's payment page directly.
+        print("Payment page:", order.payment_page_url)
         if order.estimated_toman_amount:
             print("Estimated Toman amount:", order.estimated_toman_amount)
 

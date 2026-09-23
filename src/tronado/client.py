@@ -75,6 +75,7 @@ class TronadoClient:
 
     Args:
         api_key: API key for the ``x-api-key`` header. Falls back to ``TRONADO_API_KEY``.
+            Only the order endpoints need it; the price endpoints are public.
         base_url: Base URL (defaults to production; ``TRONADO_BASE_URL`` honoured).
         timeout: Per-request timeout in seconds.
         max_retries: Maximum retries for idempotent operations.

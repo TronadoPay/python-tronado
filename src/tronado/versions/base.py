@@ -32,7 +32,8 @@ class Operation(Generic[ResponseT]):
         method: HTTP method (always ``"POST"`` in the current API).
         path_template: URL path with an optional ``{version}`` placeholder, e.g.
             ``"/api/{version}/GetOrderToken"`` or ``"/Order/GetStatus"``.
-        request_model: Model type for the JSON body, or ``None`` for no-body endpoints.
+        request_model: Model type for the JSON body, or ``None`` for endpoints without
+            input (these are still sent an empty ``{}`` body).
         response_model: Model type the (unwrapped) success payload validates into.
         idempotent: Whether the operation is safe to retry. ``GetOrderToken`` is
             ``False`` because it creates a transaction.
@@ -40,6 +41,9 @@ class Operation(Generic[ResponseT]):
             ``{IsSuccessful, Code, Message, Data}`` envelope.
         not_found_key: For flat responses, the JSON key whose presence signals "not
             found" (Tronado returns HTTP 200 with ``{"Error": ...}``).
+        requires_auth: Whether the ``x-api-key`` header is required (and sent). The
+            price endpoints are public; ``GetPriceWithWageToToman`` authenticates with
+            ``RequestCode`` in its body instead.
     """
 
     name: str
@@ -50,6 +54,7 @@ class Operation(Generic[ResponseT]):
     idempotent: bool = True
     envelope: bool = False
     not_found_key: Optional[str] = None
+    requires_auth: bool = True
 
 
 class BaseVersion:

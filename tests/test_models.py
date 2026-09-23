@@ -8,14 +8,15 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from tronado.constants import OrderStatusCode
+from tronado.constants import DisputeEvent, DisputeOutcome, DisputeTypeCode, OrderStatusCode
 from tronado.models import (
     CallbackPayload,
     GetOrderTokenRequest,
     OrderStatus,
+    OrderTokenData,
 )
 
-# (OrderStatusID, enum member name) for every status documented in the Postman docs.
+# (OrderStatusID, enum member name) for every status documented in the API docs.
 DOCUMENTED_STATUSES = [
     (20, "WAITING_FOR_PAYMENT"),
     (25, "PHOTO_SENT_TO_ADMIN"),
@@ -136,3 +137,60 @@ def test_unknown_fields_are_ignored_for_forward_compat() -> None:
     status = OrderStatus.model_validate({"PaymentID": "p", "SomeFutureField": 123})
     assert status.payment_id == "p"
     assert not hasattr(status, "some_future_field")
+
+
+def test_dispute_enums_match_documentation() -> None:
+    assert {m.value for m in DisputeTypeCode} == {1, 11, 31, 41, 61}
+    assert {m.value for m in DisputeOutcome} == {"Annulled", "AmountAdjusted", "NoChange"}
+    assert {m.value for m in DisputeEvent} == {"DisputeAccepted"}
+    # String enums compare equal to, and format as, the raw API value.
+    assert DisputeOutcome.ANNULLED == "Annulled"
+    assert f"{DisputeOutcome.AMOUNT_ADJUSTED}" == "AmountAdjusted"
+
+
+def test_callback_doc_sample_and_tron_price_toman() -> None:
+    # The IPN sample payload from the docs.
+    cb = CallbackPayload.model_validate(
+        {
+            "UniqueCode": "00000000000000000000000000000000",
+            "PaymentId": "INV-10231",
+            "UserTelegramId": 123456789,
+            "Wallet": "TExampleWa11etAddressForDocsOnly00",
+            "Hash": "TrndOrderID_1000001",
+            "TronAmount": 7.703448,
+            "ActualTronAmount": 7.703448,
+            "UserPaidTomanAmount": 596270,
+            "TomanAmountWithoutWage": 513720,
+            "OrderStatusID": 30,
+            "OrderStatusTitle": "تایید شده",
+            "IsPaid": True,
+            "PaymentDate": "2026-08-01T13:34:40.453",
+        }
+    )
+    assert cb.is_payment_accepted is True
+    assert cb.toman_amount_without_wage == 513720
+    # Documented tip: TRX price in this order = TomanAmountWithoutWage / TronAmount.
+    assert cb.tron_price_toman == Decimal(513720) / Decimal("7.703448")
+    assert cb.payment_date == datetime(2026, 8, 1, 13, 34, 40, 453000)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"TronAmount": 7},
+        {"TomanAmountWithoutWage": 1},
+        {"TronAmount": 0, "TomanAmountWithoutWage": 1},
+    ],
+)
+def test_tron_price_toman_is_none_when_not_computable(payload: dict) -> None:
+    assert CallbackPayload.model_validate(payload).tron_price_toman is None
+
+
+def test_payment_page_url_embeds_and_escapes_the_token() -> None:
+    token = OrderTokenData.model_validate({"Token": "3f2a9c00-11aa"})
+    assert token.payment_page_url == (
+        "https://t.me/tronado_robot/customerpayment?startapp=3f2a9c00-11aa"
+    )
+    odd = OrderTokenData.model_validate({"Token": "a&b c"})
+    assert odd.payment_page_url.endswith("?startapp=a%26b%20c")

@@ -1,14 +1,15 @@
 # Tronado Python SDK
 
-A production-grade, **version-aware** Python SDK for the [Tronado Public API](https://documenter.getpostman.com/view/48018954/2sBXwwm7St).
+A production-grade, **version-aware** Python SDK for the [Tronado Public API](https://miniapp.tronado.cloud/assets/api-docs.md).
 Tronado lets a business accept TRON (TRX) payments: you create an order, the customer
-pays through Tronado's in-app/web payment UI, and Tronado notifies your server with a
-signed webhook.
+pays through Tronado's payment page (a Telegram mini app), and Tronado notifies your
+server with a signed webhook.
 
 - **Sync & async** clients on a single `httpx` core
 - **Typed** Pydantic v2 request/response models (amounts are `Decimal`, never `float`)
 - **Idempotency-aware retries** — order creation is never silently retried
-- **Webhook verification** for the documented `X-Tronado-Sig` HMAC-SHA512 scheme
+- **Signed webhooks** — IPN and dispute callbacks, verified with the documented
+  `X-Tronado-Sig` HMAC-SHA512 scheme and parsed into typed payloads
 - **Designed for API versioning** — v5 today, future versions plug in cleanly
 
 > Currently implements API **v5** (the recommended version).
@@ -33,7 +34,7 @@ Requires Python **3.9+**. Runtime dependencies: `httpx` and `pydantic` (v2).
 
 ## Authentication
 
-Every outbound endpoint requires your API key in the **`x-api-key`** header (this is the
+The order endpoints require your API key in the **`x-api-key`** header (this is the
 documented scheme — there is no `Authorization: Bearer`). Request a key from
 [Tronado support](https://t.me/TronadoSupp).
 
@@ -41,6 +42,15 @@ documented scheme — there is no `Authorization: Bearer`). Request a key from
 from tronado import TronadoClient
 
 client = TronadoClient(api_key="YOUR_API_KEY")
+```
+
+The price endpoints are public: the SDK never sends your key to them, and you can use
+them without one. A keyless client only raises `TronadoConfigError` once you call an
+order endpoint (before anything is sent).
+
+```python
+with TronadoClient() as tron:   # no key needed for prices
+    print(tron.price.tron.get_price_to_toman().tron_price_toman)
 ```
 
 Or via environment variable (no argument needed):
@@ -56,7 +66,7 @@ export TRONADO_API_KEY="YOUR_API_KEY"
 
 | Option | Default | Description |
 |---|---|---|
-| `api_key` | `TRONADO_API_KEY` env | API key for the `x-api-key` header |
+| `api_key` | `TRONADO_API_KEY` env | API key for the `x-api-key` header (order endpoints only) |
 | `base_url` | `https://bot.tronado.cloud` | API base URL (`TRONADO_BASE_URL` honoured) |
 | `timeout` | `30.0` | Per-request timeout (seconds) |
 | `max_retries` | `3` | Max retries for **idempotent** operations |
@@ -103,10 +113,13 @@ with TronadoClient(api_key="YOUR_API_KEY") as tron:
         payment_id="inv-1001",                       # your unique id
         wallet_address="TXYZ12345abcdef...",         # destination wallet
         tron_amount=Decimal("12.123456"),            # invoice amount in TRX
-        callback_url="https://your-domain.com/payment/callback",
+        callback_url="https://your-domain.com/payment/callback",  # registered domain
         wage_from_business_percentage=0,             # who absorbs the fee (0–100)
     )
     print("Pay here:", order.full_payment_url)
+    # Or put this behind a button in your own bot: it opens Tronado's payment page
+    # directly, without the customer having to start the Tronado bot.
+    print("Payment page:", order.payment_page_url)
 
     # 3. Later, check status (by Tronado OrderId / TrndOrderID_x / TXID).
     status = tron.order.get_status(id="TrndOrderID_55")
@@ -147,20 +160,27 @@ The async client exposes the same methods with `await`.
 | `get_status(id)` | `POST /Order/GetStatus` | `OrderStatus` (raises `OrderNotFoundError` if absent) |
 | `get_status_by_payment_id(id)` | `POST /Order/GetStatusByPaymentID` | `OrderStatus` |
 
+`OrderTokenData.payment_page_url` builds the documented payment page deep link
+(`https://t.me/tronado_robot/customerpayment?startapp={token}`).
+
 ### Price — `client.price`
+
+Public endpoints: no API key is needed or sent. `get_price_with_wage_to_toman` is
+authenticated by the `request_code` you get from support instead.
 
 | Method | Endpoint | Returns |
 |---|---|---|
 | `price.tron.get_price_to_toman()` | `POST /Tron/GetPriceToToman` | `TronPrice` |
 | `price.tron.get_price_with_wage_to_toman(request_code, wallet_address, tron_amount)` | `POST /Tron/GetPriceWithWageToToman` | `PriceWithWage` |
 | `price.toman.convert_to_tron_wage_subtracted(toman, wallet)` | `POST /Toman/ConvertToTronWageSubtracted` | `TronConversion` |
-| `price.toman.get_price_to_toman()` | `POST /Toman/GetPriceToToman` | `DollarPrice` |
 | `price.dollar.convert_to_tron_wage_subtracted(dollar, wallet)` | `POST /Dollar/ConvertToTronWageSubtracted` | `TronConversion` |
 | `price.dollar.get_price_to_toman()` | `POST /Dollar/GetPriceToToman` | `DollarPrice` |
+| ~~`price.toman.get_price_to_toman()`~~ | `POST /Toman/GetPriceToToman` | `DollarPrice` — **deprecated**, no longer documented; use `price.dollar.get_price_to_toman()` |
 
 > Amount arguments (`tron_amount`, `dollar`) accept `Decimal`, `int`, `float`, or `str`.
 > They are coerced via `str` to avoid binary-float rounding, and sent on the wire as JSON
-> numbers.
+> numbers. Endpoints without input are sent an empty `{}` body, as the docs require (a
+> POST with no body is rejected with `411 Length Required`).
 
 ---
 
@@ -202,6 +222,10 @@ signs it with `X-Tronado-Sig = HMAC_SHA512(raw_body, your_ipn_signing_key)` (low
 hex). Get your `IpnSigningKey` from support. **Always verify against the raw body** — do
 not re-serialize parsed JSON.
 
+> **Register your callback domain.** The domain of `CallbackUrl` must be on your
+> business's allow-list (ask support) and the URL must be `https`. If the domain is not
+> registered, **no callback is sent** and the order silently stays pending on your side.
+
 ```python
 from tronado.webhook import construct_event
 from tronado.exceptions import InvalidSignatureError
@@ -219,11 +243,27 @@ def handle_webhook(raw_body: bytes, signature_header: str) -> int:
         return 200
 
     if event.is_payment_accepted:               # IsPaid == True or status 30
-        # Charge the user with what they actually paid (includes wage), per the docs.
-        credit_user(event.payment_id, event.user_paid_toman_amount)
+        # Default wage mode (0): credit the Toman value of the TRX you received.
+        # See "Which amount to credit" below for the other modes.
+        credit_user(event.payment_id, event.toman_amount_without_wage)
 
     return 200  # return 2xx to acknowledge, else Tronado retries
 ```
+
+### Which amount to credit
+
+The two v5 Toman fields mean different things: `toman_amount_without_wage` is the Toman
+value of the TRX actually delivered to you; `user_paid_toman_amount` is what the user
+paid, **including** the fee. Pick by the `wage_from_business_percentage` you used:
+
+| `wage_from_business_percentage` | Credit the user with |
+|---|---|
+| `0` (default — the user pays the fee) | `toman_amount_without_wage`. Crediting `user_paid_toman_amount` here gifts Tronado's fee to the user out of your pocket. |
+| `100` (you absorb the fee) | `user_paid_toman_amount` (≈ your invoice's base value) |
+| between `0` and `100` | your own invoice value: the `tron_amount` you sent to `get_order_token` × the TRX price |
+
+The TRX price in a given order is `toman_amount_without_wage ÷ tron_amount`, available as
+`event.tron_price_toman`.
 
 FastAPI example (reads the **raw** body before parsing):
 
@@ -254,6 +294,64 @@ from tronado.webhook import verify_signature, parse_callback
 if verify_signature(raw, sig, signing_key):
     event = parse_callback(raw)
 ```
+
+---
+
+## Handling dispute callbacks
+
+After an order is approved, the card holder can dispute it (e.g. "no deposit was made",
+"less was deposited"). When Tronado **accepts** a dispute the order is either annulled or
+its amount corrected, and an optional, signed **dispute callback** tells you so.
+
+- **Opt-in**, sent to a separate `DisputeCallbackUrl`, never the order's `CallbackUrl`.
+  Set it in the Tronado mini app under
+  [Business → Settings](https://miniapp.tronado.cloud/business/settings) (or via
+  support). Its domain must be on the same callback allow-list.
+- Signed exactly like the IPN: same `X-Tronado-Sig` header, same `IpnSigningKey`.
+- Sent only for **accepted** disputes of a type that affects your order.
+- Delivered **at least once**: de-duplicate on `event.dedup_key` (`DisputeId`).
+- Acknowledge with 2xx. Transient failures (5xx, 408, 429, timeout) are retried up to 10
+  more times over ~4.5 hours; permanent 4xx (e.g. 404, 410) are not retried. So answer
+  5xx when *your* side fails temporarily.
+
+Branch on the **outcome**, not the dispute type:
+
+| Outcome | Meaning | What to do |
+|---|---|---|
+| `Annulled` (`event.is_annulled`) | The money never arrived, or the receipt was a duplicate; the order is cancelled. | Reverse what you granted for `event.payment_id` (like a chargeback). |
+| `AmountAdjusted` (`event.is_amount_adjusted`) | The user paid a different amount; the order was corrected to it. | Adjust the balance by `event.user_must_pay_toman_delta` / `event.tron_amount_delta`. |
+| anything else (`NoChange` is reserved) | Reserved for the future. | Log it; no action. |
+
+An annulled order also triggers the regular IPN with `OrderStatusID == 200`. The two may
+arrive in either order, and processing both is safe.
+
+```python
+from tronado.webhook import construct_dispute_event
+from tronado.exceptions import InvalidSignatureError, TronadoWebhookError
+
+def handle_dispute(raw_body: bytes, signature_header: str) -> int:
+    try:
+        event = construct_dispute_event(raw_body, signature_header, IPN_SIGNING_KEY)
+    except InvalidSignatureError:
+        return 401
+    except TronadoWebhookError:
+        return 400  # signed, but not a valid dispute payload
+
+    # Acknowledge (but ignore) future event types and repeated deliveries.
+    if not event.is_dispute_accepted or already_processed(event.dedup_key):
+        return 200
+
+    if event.is_annulled:
+        reverse_credit(event.payment_id)
+    elif event.is_amount_adjusted:
+        adjust_credit(event.payment_id, event.user_must_pay_toman_delta)
+    else:
+        log.info("Unhandled dispute outcome %s", event.outcome)
+    return 200
+```
+
+The payload carries no card-holder identity, dispute text or receipt, only the effect on
+your order. `DisputeTypeCode` and `DisputeOutcome` enumerate the documented values.
 
 ---
 
@@ -329,8 +427,54 @@ or $0.10). `wage_from_business_percentage` on `get_order_token` controls who abs
   your received `TronAmount` is the net after fee.
 - Values in between split the fee proportionally.
 
-To charge your user correctly, use `user_paid_toman_amount` from the **v5 webhook** (what
-the user actually paid) rather than the TRX you receive.
+Worked example from the docs: a 10 TRX invoice, a 20% wage, 70,000 Toman per TRX
+(network fee ignored):
+
+| `wage_from_business_percentage` | TRX you receive | `TomanAmountWithoutWage` | `UserPaidTomanAmount` |
+|---|---|---|---|
+| `0` | 10.000 | 700,000 | 840,000 |
+| `50` | 9.167 | 641,700 | 770,000 |
+| `100` | 8.333 | 583,300 | 700,000 |
+
+The percentage decides how much TRX you get, not which field to credit; see
+[Which amount to credit](#which-amount-to-credit). Real amounts differ by up to a few
+thousand Toman because of rounding and a small amount added to make each deposit unique.
+
+**TRON network fee:** for NowPayments wallets or inactive wallets, about 1.2 TRX (wallet
+activation) is added to the final amount; for active wallets, the transfer fee (up to
+about 0.8 TRX) is added. Contact support if more than that is added.
+
+## Limits
+
+Per-user transaction limits, as documented:
+
+| Limit | Value | Adjustable? |
+|---|---|---|
+| Transactions per day | 1 | via support |
+| Daily amount | 500,000 Toman | yes |
+| Monthly amount | 1,000,000 Toman | via support |
+| Cancelled transactions per day | 2 | no |
+| Cancelled transactions per month | 4 | no |
+
+## Testing your callback
+
+From the Telegram account your business is registered with, send the Tronado bot one of
+these (for localhost, expose a public URL with a tunnel and use it as the callback URL):
+
+```text
+/dummyrequest <your_callback_url>
+```
+
+```text
+/dummysuccessfulrequest {
+  "PaymentID": "12345",
+  "UserTelegramId": 123456,
+  "Wallet": "Wallet",
+  "TronAmount": 12.123456,
+  "ActualTronAmount": 12.123456,
+  "CallbackUrl": "https://your-tunnel.example.com/Test/Test"
+}
+```
 
 ---
 

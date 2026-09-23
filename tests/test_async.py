@@ -108,6 +108,28 @@ async def test_async_price_conversions(async_client: AsyncTronadoClient) -> None
     assert price.dollar_price == 100783
 
 
+@respx.mock
+async def test_async_toman_price_is_deprecated(async_client: AsyncTronadoClient) -> None:
+    respx.post(url("/Toman/GetPriceToToman")).mock(
+        return_value=httpx.Response(200, json={"DollarPrice": 100783})
+    )
+    with pytest.warns(DeprecationWarning, match="price.dollar.get_price_to_toman"):
+        price = await async_client.price.toman.get_price_to_toman()
+    assert price.dollar_price == 100783
+
+
+@respx.mock
+async def test_async_price_without_api_key_sends_empty_json_body() -> None:
+    route = respx.post(url("/Tron/GetPriceToToman")).mock(
+        return_value=httpx.Response(200, json={"TronPriceToman": 100, "TronPriceDollar": 1})
+    )
+    async with AsyncTronadoClient() as keyless:
+        await keyless.price.tron.get_price_to_toman()
+    request = route.calls.last.request
+    assert request.content == b"{}"
+    assert "x-api-key" not in request.headers
+
+
 async def test_async_context_manager_closes() -> None:
     async with AsyncTronadoClient(api_key="k") as c:
         inner = c._transport._client  # noqa: SLF001 - white-box check

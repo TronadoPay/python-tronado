@@ -14,7 +14,7 @@ Quickstart::
         )
         print(order.full_payment_url)
 
-See :mod:`tronado.webhook` for verifying inbound IPN callbacks.
+See :mod:`tronado.webhook` for verifying inbound IPN and dispute callbacks.
 """
 
 from __future__ import annotations
@@ -25,8 +25,12 @@ from .constants import (
     API_KEY_HEADER,
     DEFAULT_API_VERSION,
     DEFAULT_BASE_URL,
+    PAYMENT_PAGE_URL_TEMPLATE,
     SDK_VERSION,
     WEBHOOK_SIGNATURE_HEADER,
+    DisputeEvent,
+    DisputeOutcome,
+    DisputeTypeCode,
     OrderStatusCode,
 )
 from .exceptions import (
@@ -46,6 +50,7 @@ from .exceptions import (
 from .models import (
     ApiEnvelope,
     CallbackPayload,
+    DisputeCallbackPayload,
     DollarConvertRequest,
     DollarPrice,
     GetOrderTokenRequest,
@@ -59,7 +64,14 @@ from .models import (
     TronPrice,
 )
 from .versions import available_versions
-from .webhook import compute_signature, construct_event, parse_callback, verify_signature
+from .webhook import (
+    compute_signature,
+    construct_dispute_event,
+    construct_event,
+    parse_callback,
+    parse_dispute_callback,
+    verify_signature,
+)
 
 __version__ = SDK_VERSION
 
@@ -71,19 +83,26 @@ __all__ = [
     "TronadoConfig",
     # constants
     "OrderStatusCode",
+    "DisputeEvent",
+    "DisputeTypeCode",
+    "DisputeOutcome",
     "DEFAULT_BASE_URL",
     "DEFAULT_API_VERSION",
     "API_KEY_HEADER",
     "WEBHOOK_SIGNATURE_HEADER",
+    "PAYMENT_PAGE_URL_TEMPLATE",
     "available_versions",
     # webhook helpers
     "verify_signature",
     "compute_signature",
     "parse_callback",
     "construct_event",
+    "parse_dispute_callback",
+    "construct_dispute_event",
     # models
     "ApiEnvelope",
     "CallbackPayload",
+    "DisputeCallbackPayload",
     "GetOrderTokenRequest",
     "GetStatusRequest",
     "OrderTokenData",

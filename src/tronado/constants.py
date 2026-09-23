@@ -6,11 +6,11 @@ Everything here is taken directly from the Tronado Public API documentation. We 
 
 from __future__ import annotations
 
-from enum import IntEnum
+from enum import Enum, IntEnum
 
 #: SDK version, also used by ``tronado.__version__`` and the default ``User-Agent``
 #: header. Keep in sync with ``[project].version`` in ``pyproject.toml``.
-SDK_VERSION = "0.1.1"
+SDK_VERSION = "0.2.0"
 
 #: Default ``User-Agent`` header value.
 DEFAULT_USER_AGENT = f"tronado-python/{SDK_VERSION}"
@@ -45,9 +45,14 @@ API_KEY_ENV_VAR = "TRONADO_API_KEY"
 #: Environment variable consulted when no base URL is passed explicitly.
 BASE_URL_ENV_VAR = "TRONADO_BASE_URL"
 
-#: Header that Tronado sets on every IPN/webhook callback. Its value is the
+#: Header that Tronado sets on every IPN and dispute callback. Its value is the
 #: lowercase hex HMAC-SHA512 of the raw request body keyed with your IPN signing key.
 WEBHOOK_SIGNATURE_HEADER = "X-Tronado-Sig"
+
+#: Tronado payment page (Telegram mini app) deep link; ``{token}`` is the order token
+#: returned by ``GetOrderToken``. Put it behind a button in your own bot so the customer
+#: lands on the payment page without having to start the Tronado bot.
+PAYMENT_PAGE_URL_TEMPLATE = "https://t.me/tronado_robot/customerpayment?startapp={token}"
 
 
 class OrderStatusCode(IntEnum):
@@ -82,6 +87,63 @@ class OrderStatusCode(IntEnum):
     """Order was cancelled. (``Cancelled``)"""
 
 
+class _StrEnum(str, Enum):
+    """``str``-valued enum whose members compare equal to, and format as, their value."""
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+class DisputeEvent(_StrEnum):
+    """Documented ``Event`` values of the dispute callback.
+
+    Only ``DisputeAccepted`` exists today; the docs ask you to branch on ``Event`` so a
+    future event type is not mistaken for an accepted dispute.
+    """
+
+    DISPUTE_ACCEPTED = "DisputeAccepted"
+
+
+class DisputeTypeCode(IntEnum):
+    """Documented ``DisputeTypeID`` values of the dispute callback.
+
+    Only the dispute types that affect your order are ever sent. ``DisputeTypeTitle``
+    carries a Persian, display-only label. Branch on the ``Outcome`` of the dispute
+    (:class:`DisputeOutcome`), not on its type.
+    """
+
+    NO_DEPOSIT = 1
+    """The card holder says no deposit was made. (``NoDeposit``)"""
+
+    AMOUNT_IS_IN_RIAL = 11
+    """The amount was deposited in Rial instead of Toman. (``AmountIsInRial``)"""
+
+    AMOUNT_IS_MORE = 31
+    """More than the invoice amount was deposited. (``AmountIsMore``)"""
+
+    AMOUNT_IS_LESS = 41
+    """Less than the invoice amount was deposited. (``AmountIsLess``)"""
+
+    RECEIPT_IS_REPETITIVE = 61
+    """The payment receipt was a duplicate. (``ReceiptIsRepetitive``)"""
+
+
+class DisputeOutcome(_StrEnum):
+    """Documented ``Outcome`` values of the dispute callback: its effect on your order.
+
+    Treat any other value as unknown: log it and take no action.
+    """
+
+    ANNULLED = "Annulled"
+    """The order was cancelled; reverse what you granted for it (like a chargeback)."""
+
+    AMOUNT_ADJUSTED = "AmountAdjusted"
+    """The order amount was corrected; adjust the user's balance by the deltas."""
+
+    NO_CHANGE = "NoChange"
+    """Reserved; not sent at the moment."""
+
+
 __all__ = [
     "SDK_VERSION",
     "DEFAULT_USER_AGENT",
@@ -95,5 +157,9 @@ __all__ = [
     "API_KEY_ENV_VAR",
     "BASE_URL_ENV_VAR",
     "WEBHOOK_SIGNATURE_HEADER",
+    "PAYMENT_PAGE_URL_TEMPLATE",
     "OrderStatusCode",
+    "DisputeEvent",
+    "DisputeTypeCode",
+    "DisputeOutcome",
 ]

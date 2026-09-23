@@ -23,7 +23,7 @@ from .price import (
     TronConversion,
     TronPrice,
 )
-from .webhook import CallbackPayload
+from .webhook import CallbackPayload, DisputeCallbackPayload
 
 __all__ = [
     # base / shared
@@ -47,4 +47,5 @@ __all__ = [
     "DollarPrice",
     # webhook
     "CallbackPayload",
+    "DisputeCallbackPayload",
 ]

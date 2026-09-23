@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from typing import Optional
+from urllib.parse import quote
 
 from pydantic import Field, field_validator
 
-from ..constants import OrderStatusCode
-from .base import FlexibleDateTime, TronadoModel, TronDecimal
+from ..constants import PAYMENT_PAGE_URL_TEMPLATE, OrderStatusCode
+from .base import FlexibleDateTime, TronadoModel, TronDecimal, to_known_enum
 
 
 class GetOrderTokenRequest(TronadoModel):
@@ -17,7 +18,8 @@ class GetOrderTokenRequest(TronadoModel):
         payment_id: Your application's unique payment identifier.
         wallet_address: Destination TRON wallet address.
         tron_amount: Invoice amount in TRX. Use the price endpoints first to compute it.
-        callback_url: HTTPS URL that Tronado will POST payment results to.
+        callback_url: HTTPS URL that Tronado will POST payment results to. Its domain
+            must be registered with Tronado support, or no callback is sent.
     """
 
     payment_id: str = Field(alias="PaymentID")
@@ -63,6 +65,15 @@ class OrderTokenData(TronadoModel):
         default=None, alias="EstimatedTomanAmountExpireDateUtc"
     )
 
+    @property
+    def payment_page_url(self) -> str:
+        """Deep link to Tronado's payment page (Telegram mini app) for this order.
+
+        Put it behind a button in your own bot: the customer lands straight on the
+        payment page without having to start the Tronado bot.
+        """
+        return PAYMENT_PAGE_URL_TEMPLATE.format(token=quote(self.token, safe=""))
+
 
 class OrderStatus(TronadoModel):
     """Response of ``GetStatus`` / ``GetStatusByPaymentID`` for an existing order.
@@ -101,12 +112,7 @@ class OrderStatus(TronadoModel):
         new server-side statuses never raise. Use :attr:`order_status_id` for the raw
         value.
         """
-        if self.order_status_id is None:
-            return None
-        try:
-            return OrderStatusCode(self.order_status_id)
-        except ValueError:
-            return None
+        return to_known_enum(OrderStatusCode, self.order_status_id)
 
     @property
     def is_payment_accepted(self) -> bool:

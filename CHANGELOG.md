@@ -4,6 +4,45 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-09-23
+
+Aligned with the updated official API docs
+(<https://miniapp.tronado.cloud/assets/api-docs.md>), which replace the Postman collection.
+
+### Added
+
+- Dispute callback support: `DisputeCallbackPayload`, `parse_dispute_callback` and
+  `construct_dispute_event` (same `X-Tronado-Sig` scheme and key as the IPN), plus the
+  `DisputeEvent`, `DisputeTypeCode` and `DisputeOutcome` enums. The payload exposes
+  `is_annulled`, `is_amount_adjusted`, `dedup_key` (`DisputeId`) and typed deltas.
+- `OrderTokenData.payment_page_url`: the documented payment page deep link
+  (`https://t.me/tronado_robot/customerpayment?startapp={token}`), also available as
+  `PAYMENT_PAGE_URL_TEMPLATE`.
+- `CallbackPayload.tron_price_toman`: the per-order TRX price,
+  `TomanAmountWithoutWage ÷ TronAmount`.
+- `Operation.requires_auth` and `TronadoConfig.build_headers(authenticated=...)`.
+
+### Changed
+
+- The price endpoints are documented as public: the SDK no longer sends the API key to
+  them, and a client can be built without a key. `TronadoConfigError` for a missing key
+  is now raised when an order endpoint is called (still before any request is sent)
+  instead of at construction. A blank key is treated as missing.
+- Endpoints without input now send an explicit `{}` body, as the docs require (IIS
+  rejects a POST without a body with `411 Length Required`).
+- Corrected the webhook guidance: in the default wage mode (`0`) credit
+  `toman_amount_without_wage`, not `user_paid_toman_amount` (that would gift Tronado's
+  fee to the user). Docstrings, README and examples now carry the documented table for
+  each wage mode.
+- README: callback domain allow-list, the fee worked example, the TRON network fee,
+  limits, and the `/dummyrequest` testing commands.
+
+### Deprecated
+
+- `price.toman.get_price_to_toman()` (`/Toman/GetPriceToToman`) is no longer documented.
+  It still works but emits a `DeprecationWarning`; use `price.dollar.get_price_to_toman()`,
+  which returns the same `DollarPrice`.
+
 ## [0.1.1] - 2026-06-24
 
 ### Added

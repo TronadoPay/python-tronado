@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from tronado import TronadoClient
-from tronado.exceptions import OrderNotFoundError
+from tronado.exceptions import OrderNotFoundError, TronadoConfigError
 from tronado.models import OrderStatus, OrderTokenData
 
 from .conftest import url
@@ -55,6 +55,9 @@ def test_get_order_token_success(client: TronadoClient) -> None:
     assert isinstance(result, OrderTokenData)
     assert result.token == "1234abcd"
     assert result.estimated_toman_amount == "150000"
+    assert result.payment_page_url == (
+        "https://t.me/tronado_robot/customerpayment?startapp=1234abcd"
+    )
 
     request = route.calls.last.request
     # Auth uses the documented header (not Bearer).
@@ -110,3 +113,20 @@ def test_get_status_by_payment_id_uses_correct_path(client: TronadoClient) -> No
     client.order.get_status_by_payment_id(id="inv-1")
     assert route.called
     assert route.calls.last.request.url.path == "/Order/GetStatusByPaymentID"
+
+
+@respx.mock
+def test_order_endpoints_require_an_api_key() -> None:
+    # Unlike the price endpoints, the order endpoints need the key; without one the
+    # SDK fails before sending anything.
+    token_route = respx.post(url("/api/v5/GetOrderToken"))
+    status_route = respx.post(url("/Order/GetStatus"))
+    with TronadoClient() as keyless:
+        with pytest.raises(TronadoConfigError, match="API key"):
+            keyless.order.get_order_token(
+                payment_id="p", wallet_address="T", tron_amount="1", callback_url="https://x/cb"
+            )
+        with pytest.raises(TronadoConfigError, match="API key"):
+            keyless.order.get_status(id="x")
+    assert not token_route.called
+    assert not status_route.called
